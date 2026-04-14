@@ -1,5 +1,9 @@
 import { useState } from 'react';
+import { FileDown, FileText, Table2 } from 'lucide-react';
 import { downloadBCF, downloadPDF, downloadCSV } from '../api/client';
+import { GlowCard } from '../components/ui/GlowCard';
+import { SectionHeader } from '../components/ui/SectionHeader';
+import type { GlowColor } from '../components/ui/GlowCard';
 
 function useDownload(fetcher: () => Promise<Blob>, filename: string) {
   const [loading, setLoading] = useState(false);
@@ -22,60 +26,72 @@ function useDownload(fetcher: () => Promise<Blob>, filename: string) {
   return { download, loading };
 }
 
+const REPORTS: {
+  title: string;
+  desc: string;
+  glow: GlowColor;
+  icon: typeof FileDown;
+  gradient: string;
+}[] = [
+  {
+    title: 'BCF Export',
+    desc: 'Download all defect issues as a BCF (BIM Collaboration Format) zip file. Import into Revit, Navisworks, or other BIM tools.',
+    glow: 'cyan',
+    icon: FileDown,
+    gradient: 'from-neon-cyan to-neon-blue',
+  },
+  {
+    title: 'PDF Report',
+    desc: 'Generate a comprehensive inspection report in PDF format with summary statistics and defect register.',
+    glow: 'purple',
+    icon: FileText,
+    gradient: 'from-neon-purple to-neon-magenta',
+  },
+  {
+    title: 'CSV Export',
+    desc: 'Export defect data as a CSV spreadsheet for analysis in Excel or other tools.',
+    glow: 'green',
+    icon: Table2,
+    gradient: 'from-neon-green to-neon-cyan',
+  },
+];
+
 export default function ReportsPage() {
-  const bcf = useDownload(downloadBCF, 'defects.bcfzip');
-  const pdf = useDownload(downloadPDF, 'inspection_report.pdf');
-  const csv = useDownload(downloadCSV, 'defects.csv');
+  const hooks = [
+    useDownload(downloadBCF, 'defects.bcfzip'),
+    useDownload(downloadPDF, 'inspection_report.pdf'),
+    useDownload(downloadCSV, 'defects.csv'),
+  ];
 
   return (
-    <div className="p-6 max-w-2xl">
-      <h1 className="text-2xl font-bold mb-4">Reports & Export</h1>
+    <div className="p-6 max-w-2xl space-y-6">
+      <SectionHeader title="Reports & Export" accent="green" />
 
       <div className="space-y-4">
-        <div className="bg-white rounded-lg shadow p-4">
-          <h2 className="font-semibold mb-2">BCF Export</h2>
-          <p className="text-sm text-gray-500 mb-3">
-            Download all defect issues as a BCF (BIM Collaboration Format) zip file.
-            Import into Revit, Navisworks, or other BIM tools.
-          </p>
-          <button
-            onClick={bcf.download}
-            disabled={bcf.loading}
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm disabled:opacity-50"
-          >
-            {bcf.loading ? 'Generating...' : 'Download BCF'}
-          </button>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-4">
-          <h2 className="font-semibold mb-2">PDF Report</h2>
-          <p className="text-sm text-gray-500 mb-3">
-            Generate a comprehensive inspection report in PDF format with summary
-            statistics and defect register.
-          </p>
-          <button
-            onClick={pdf.download}
-            disabled={pdf.loading}
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm disabled:opacity-50"
-          >
-            {pdf.loading ? 'Generating...' : 'Download PDF'}
-          </button>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-4">
-          <h2 className="font-semibold mb-2">CSV Export</h2>
-          <p className="text-sm text-gray-500 mb-3">
-            Export defect data as a CSV spreadsheet for analysis in Excel or
-            other tools.
-          </p>
-          <button
-            onClick={csv.download}
-            disabled={csv.loading}
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm disabled:opacity-50"
-          >
-            {csv.loading ? 'Generating...' : 'Download CSV'}
-          </button>
-        </div>
+        {REPORTS.map((r, i) => {
+          const { download, loading } = hooks[i];
+          const Icon = r.icon;
+          return (
+            <GlowCard key={r.title} glow={r.glow}>
+              <div className="flex items-start gap-4">
+                <div className={`p-2 rounded-lg bg-gradient-to-br ${r.gradient} shrink-0`}>
+                  <Icon size={20} className="text-white" />
+                </div>
+                <div className="flex-1">
+                  <h2 className="font-semibold text-gray-200 mb-1">{r.title}</h2>
+                  <p className="text-sm text-gray-400 mb-3">{r.desc}</p>
+                  <button
+                    onClick={download}
+                    disabled={loading}
+                    className={`bg-gradient-to-r ${r.gradient} text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-40 transition-opacity`}
+                  >
+                    {loading ? 'Generating...' : `Download ${r.title.split(' ')[0]}`}
+                  </button>
+                </div>
+              </div>
+            </GlowCard>
+          );
+        })}
       </div>
     </div>
   );

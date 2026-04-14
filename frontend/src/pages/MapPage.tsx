@@ -5,18 +5,13 @@ import 'leaflet/dist/leaflet.css';
 import { getDefects } from '../api/client';
 import { Crosshair } from 'lucide-react';
 import type { Defect } from '../types';
+import { SEVERITY_HEX } from '../theme/colors';
+import { SectionHeader } from '../components/ui/SectionHeader';
 
-const SEVERITY_COLOR: Record<string, string> = {
-  low: '#22c55e',
-  medium: '#eab308',
-  high: '#f97316',
-  critical: '#ef4444',
-};
-
-// Blue pulsing icon for user location
+// Neon cyan pulsing icon for user location
 const userLocationIcon = L.divIcon({
   className: '',
-  html: '<div style="width:16px;height:16px;background:#3b82f6;border:3px solid white;border-radius:50%;box-shadow:0 0 8px rgba(59,130,246,0.6);"></div>',
+  html: '<div style="width:16px;height:16px;background:#06b6d4;border:3px solid #1e293b;border-radius:50%;box-shadow:0 0 10px rgba(6,182,212,0.6);"></div>',
   iconSize: [16, 16],
   iconAnchor: [8, 8],
 });
@@ -63,7 +58,6 @@ export default function MapPage() {
 
   const geoDefects = defects.filter((d) => d.gps_lat != null && d.gps_lng != null);
 
-  // Default center: first defect or Hong Kong
   const center: [number, number] =
     geoDefects.length > 0
       ? [geoDefects[0].gps_lat!, geoDefects[0].gps_lng!]
@@ -71,25 +65,25 @@ export default function MapPage() {
 
   return (
     <div className="p-6 h-[calc(100vh-48px)]">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold">Defect Map</h1>
+      <SectionHeader title="Defect Map" accent="purple">
         <div className="flex items-center gap-2">
-          {locError && <span className="text-red-500 text-sm">{locError}</span>}
+          {locError && <span className="text-red-400 text-xs">{locError}</span>}
           <button
             onClick={handleLocateMe}
             disabled={locating}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors text-sm font-medium"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-gradient-to-r from-neon-cyan to-neon-blue text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
           >
-            <Crosshair size={16} className={locating ? 'animate-spin' : ''} />
+            <Crosshair size={14} className={locating ? 'animate-spin' : ''} />
             {locating ? 'Locating...' : 'My Location'}
           </button>
         </div>
-      </div>
-      <div className="h-[calc(100%-60px)] rounded-lg overflow-hidden shadow">
+      </SectionHeader>
+
+      <div className="h-[calc(100%-60px)] rounded-xl overflow-hidden border border-surface-600">
         <MapContainer center={center} zoom={17} className="h-full w-full">
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution='&copy; <a href="https://carto.com/">CARTO</a>'
+            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
           />
           <FlyToLocation position={userPos} />
           {userPos && (
@@ -105,8 +99,8 @@ export default function MapPage() {
               center={[d.gps_lat!, d.gps_lng!]}
               radius={8}
               pathOptions={{
-                color: SEVERITY_COLOR[d.severity] || '#94a3b8',
-                fillColor: SEVERITY_COLOR[d.severity] || '#94a3b8',
+                color: SEVERITY_HEX[d.severity] || '#64748b',
+                fillColor: SEVERITY_HEX[d.severity] || '#64748b',
                 fillOpacity: 0.7,
               }}
             >

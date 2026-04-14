@@ -1,16 +1,35 @@
 import { useEffect, useState } from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { useNavigate } from 'react-router-dom';
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend,
+} from 'recharts';
+import { AlertTriangle, CheckCircle2, ClipboardList, Eye } from 'lucide-react';
 import { getDefectStats } from '../api/client';
 import type { DefectStats } from '../types';
+import { SEVERITY_HEX } from '../theme/colors';
+import { GlowCard } from '../components/ui/GlowCard';
+import { StatCard } from '../components/ui/StatCard';
+import { SectionHeader } from '../components/ui/SectionHeader';
+import { StatusBadge } from '../components/ui/StatusBadge';
 
-const SEVERITY_COLORS: Record<string, string> = {
-  low: '#22c55e',
-  medium: '#eab308',
-  high: '#f97316',
-  critical: '#ef4444',
+/* ── Recharts custom dark tooltip ── */
+const DarkTooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-surface-800 border border-surface-600 rounded-lg px-3 py-2 text-xs shadow-lg">
+      <p className="text-gray-300 font-medium mb-1">{label}</p>
+      {payload.map((p: any) => (
+        <p key={p.dataKey} style={{ color: p.fill || p.color }} className="font-semibold">
+          {p.name}: {p.value}
+        </p>
+      ))}
+    </div>
+  );
 };
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState<DefectStats | null>(null);
   const [error, setError] = useState('');
 
@@ -23,8 +42,8 @@ export default function Dashboard() {
   if (error) {
     return (
       <div className="p-6">
-        <h1 className="text-2xl font-bold mb-4">Dashboard</h1>
-        <p className="text-red-500">Failed to load stats: {error}</p>
+        <SectionHeader title="Dashboard" accent="green" />
+        <p className="text-red-400 mt-4">Failed to load stats: {error}</p>
       </div>
     );
   }
@@ -32,8 +51,8 @@ export default function Dashboard() {
   if (!stats) {
     return (
       <div className="p-6">
-        <h1 className="text-2xl font-bold mb-4">Dashboard</h1>
-        <p className="text-gray-500">Loading...</p>
+        <SectionHeader title="Dashboard" accent="green" />
+        <p className="text-gray-500 mt-4">Loading...</p>
       </div>
     );
   }
@@ -48,94 +67,130 @@ export default function Dashboard() {
     value,
   }));
 
+  const statusIcon = (status: string) => {
+    if (status === 'fixed') return CheckCircle2;
+    if (status === 'reviewed') return Eye;
+    return ClipboardList;
+  };
+
+  const statusGlow = (status: string) => {
+    if (status === 'fixed') return 'green' as const;
+    if (status === 'reviewed') return 'cyan' as const;
+    return 'purple' as const;
+  };
+
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-bold">Dashboard</h1>
+      <SectionHeader title="Dashboard" accent="green" />
 
-      {/* Summary cards */}
+      {/* ── KPI row ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg shadow p-4">
-          <p className="text-sm text-gray-500">Total Defects</p>
-          <p className="text-3xl font-bold">{stats.total}</p>
-        </div>
+        <StatCard
+          icon={AlertTriangle}
+          label="Total Defects"
+          value={stats.total}
+          glow="cyan"
+        />
         {Object.entries(stats.by_status).map(([status, count]) => (
-          <div key={status} className="bg-white rounded-lg shadow p-4">
-            <p className="text-sm text-gray-500 capitalize">{status}</p>
-            <p className="text-3xl font-bold">{count}</p>
-          </div>
+          <StatCard
+            key={status}
+            icon={statusIcon(status)}
+            label={status}
+            value={count}
+            glow={statusGlow(status)}
+          />
         ))}
       </div>
 
-      {/* Charts */}
+      {/* ── Charts ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Defects by class */}
-        <div className="bg-white rounded-lg shadow p-4">
-          <h2 className="text-lg font-semibold mb-3">By Defect Class</h2>
+        <GlowCard glow="cyan">
+          <h2 className="text-sm font-semibold text-gray-300 mb-3">By Defect Class</h2>
           <ResponsiveContainer width="100%" height={250}>
             <BarChart data={classData}>
-              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false} />
+              <Tooltip content={<DarkTooltip />} />
+              <Bar dataKey="value" fill="#06b6d4" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
-        </div>
+        </GlowCard>
 
         {/* Severity pie */}
-        <div className="bg-white rounded-lg shadow p-4">
-          <h2 className="text-lg font-semibold mb-3">By Severity</h2>
+        <GlowCard glow="purple">
+          <h2 className="text-sm font-semibold text-gray-300 mb-3">By Severity</h2>
           <ResponsiveContainer width="100%" height={250}>
             <PieChart>
-              <Pie data={severityData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label>
+              <Pie
+                data={severityData}
+                dataKey="value"
+                nameKey="name"
+                cx="50%"
+                cy="50%"
+                outerRadius={85}
+                innerRadius={40}
+                paddingAngle={3}
+                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+              >
                 {severityData.map((entry) => (
-                  <Cell key={entry.name} fill={SEVERITY_COLORS[entry.name] || '#94a3b8'} />
+                  <Cell key={entry.name} fill={SEVERITY_HEX[entry.name] || '#64748b'} />
                 ))}
               </Pie>
-              <Tooltip />
+              <Tooltip content={<DarkTooltip />} />
+              <Legend
+                verticalAlign="bottom"
+                iconType="circle"
+                iconSize={8}
+                wrapperStyle={{ fontSize: 11, color: '#9ca3af' }}
+              />
             </PieChart>
           </ResponsiveContainer>
-        </div>
+        </GlowCard>
       </div>
 
-      {/* Recent defects */}
-      <div className="bg-white rounded-lg shadow p-4">
-        <h2 className="text-lg font-semibold mb-3">Recent Defects</h2>
+      {/* ── Recent defects table ── */}
+      <GlowCard glow="green">
+        <h2 className="text-sm font-semibold text-gray-300 mb-3">Recent Defects</h2>
         {stats.recent.length === 0 ? (
-          <p className="text-gray-400 text-sm">No defects yet.</p>
+          <p className="text-gray-500 text-sm">No defects yet.</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-gray-500 border-b">
-                <th className="pb-2">ID</th>
-                <th className="pb-2">Class</th>
-                <th className="pb-2">Severity</th>
-                <th className="pb-2">Floor</th>
-                <th className="pb-2">Status</th>
-                <th className="pb-2">Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {stats.recent.map((d) => (
-                <tr key={d.id} className="border-b last:border-0">
-                  <td className="py-2">{d.id}</td>
-                  <td className="py-2">{d.defect_class}</td>
-                  <td className="py-2">
-                    <span
-                      className="px-2 py-0.5 rounded text-xs font-medium text-white"
-                      style={{ backgroundColor: SEVERITY_COLORS[d.severity] || '#94a3b8' }}
-                    >
-                      {d.severity}
-                    </span>
-                  </td>
-                  <td className="py-2">{d.floor}</td>
-                  <td className="py-2 capitalize">{d.status}</td>
-                  <td className="py-2">{new Date(d.created_at).toLocaleDateString()}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-500 border-b border-surface-600">
+                  <th className="pb-2 font-medium">ID</th>
+                  <th className="pb-2 font-medium">Class</th>
+                  <th className="pb-2 font-medium">Severity</th>
+                  <th className="pb-2 font-medium">Floor</th>
+                  <th className="pb-2 font-medium">Status</th>
+                  <th className="pb-2 font-medium">Date</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {stats.recent.map((d) => (
+                  <tr
+                    key={d.id}
+                    className="border-b border-surface-700/50 last:border-0 hover:bg-white/5 cursor-pointer transition-colors"
+                    onClick={() => navigate(`/defects/${d.id}`)}
+                  >
+                    <td className="py-2 text-gray-300">#{d.id}</td>
+                    <td className="py-2 text-gray-300">{d.defect_class}</td>
+                    <td className="py-2">
+                      <StatusBadge type="severity" value={d.severity} />
+                    </td>
+                    <td className="py-2 text-gray-400">{d.floor}</td>
+                    <td className="py-2">
+                      <StatusBadge type="status" value={d.status} />
+                    </td>
+                    <td className="py-2 text-gray-500">{new Date(d.created_at).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
-      </div>
+      </GlowCard>
     </div>
   );
 }
