@@ -15,13 +15,13 @@ export default function FloorPlanPanel({
   onCollapse,
 }: FloorPlanPanelProps) {
   return (
-    <div className="flex flex-col h-full bg-gray-900 text-gray-200 border-r border-gray-700 w-72 overflow-hidden">
+    <div className="flex flex-col h-full bg-surface-900 text-gray-200 border-r border-surface-700 w-72 overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-700">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-surface-700">
         <span className="font-semibold text-sm">樓層平面</span>
         <button
           onClick={onCollapse}
-          className="text-gray-400 hover:text-white p-0.5 rounded hover:bg-white/10"
+          className="text-gray-400 hover:text-cyan-400 p-0.5 rounded hover:bg-white/10 transition-colors"
           title="Collapse"
         >
           <ChevronUp size={16} />
@@ -29,7 +29,7 @@ export default function FloorPlanPanel({
       </div>
 
       {/* Description */}
-      <div className="px-3 py-2 border-b border-gray-700/50">
+      <div className="px-3 py-2 border-b border-surface-700/50">
         <p className="text-xs text-gray-500 leading-relaxed">
           點擊樓層平面可跳轉到對應樓層。視圖將被裁切，僅顯示該樓層。
         </p>
@@ -43,10 +43,10 @@ export default function FloorPlanPanel({
             <button
               key={s.name}
               onClick={() => onStoreyClick(s)}
-              className={`w-full text-left px-3 py-2 text-sm border-b border-gray-800/50 transition-colors ${
+              className={`w-full text-left px-3 py-2 text-sm border-b border-surface-800/50 transition-colors ${
                 isActive
-                  ? 'bg-blue-600/20 text-blue-400 border-l-2 border-l-blue-500'
-                  : 'text-gray-300 hover:bg-gray-800/60'
+                  ? 'bg-neon-cyan/10 text-cyan-400 border-l-2 border-l-neon-cyan'
+                  : 'text-gray-300 hover:bg-surface-800/60'
               }`}
             >
               {s.name}

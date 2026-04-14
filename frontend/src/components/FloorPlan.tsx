@@ -1,11 +1,21 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { getComponents, getDefects } from '../api/client';
 import type { Component, Defect } from '../types';
+import { SEVERITY_HEX } from '../theme/colors';
 
 interface FloorPlanProps {
   floor: string;
   onComponentClick?: (comp: Component) => void;
 }
+
+/* ── Heat-map gradient stops ── */
+const HEAT_STEPS = [
+  { label: '0', color: '#334155' },
+  { label: '', color: '#22c55e' },
+  { label: '', color: '#eab308' },
+  { label: '', color: '#f97316' },
+  { label: 'max', color: '#ef4444' },
+];
 
 export default function FloorPlan({ floor, onComponentClick }: FloorPlanProps) {
   const [components, setComponents] = useState<Component[]>([]);
@@ -14,6 +24,10 @@ export default function FloorPlan({ floor, onComponentClick }: FloorPlanProps) {
   const [viewBox, setViewBox] = useState({ x: 0, y: 0, w: 100, h: 100 });
   const [isPanning, setIsPanning] = useState(false);
   const panStart = useRef({ x: 0, y: 0 });
+  const [heatmapOn, setHeatmapOn] = useState(true);
+  const [hoveredComp, setHoveredComp] = useState<Component | null>(null);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+  const [selectedId, setSelectedId] = useState<number | null>(null);
 
   useEffect(() => {
     getComponents({ storey: floor }).then(setComponents).catch(() => {});
@@ -45,19 +59,16 @@ export default function FloorPlan({ floor, onComponentClick }: FloorPlanProps) {
   const maxCount = Math.max(1, ...Array.from(defectMap.values()).map((v) => v.length));
 
   const getColor = (comp: Component): string => {
+    if (!heatmapOn) return '#475569'; // neutral slate when off
     const count = defectMap.get(comp.id)?.length || 0;
-    if (count === 0) return '#94a3b8';
-    // Gradient: green(0) -> yellow(0.33) -> orange(0.66) -> red(1)
+    if (count === 0) return '#334155';
     const ratio = Math.min(count / maxCount, 1);
     if (ratio < 0.33) {
-      const t = ratio / 0.33;
-      return lerpColor('#22c55e', '#eab308', t);
+      return lerpColor('#22c55e', '#eab308', ratio / 0.33);
     } else if (ratio < 0.66) {
-      const t = (ratio - 0.33) / 0.33;
-      return lerpColor('#eab308', '#f97316', t);
+      return lerpColor('#eab308', '#f97316', (ratio - 0.33) / 0.33);
     } else {
-      const t = (ratio - 0.66) / 0.34;
-      return lerpColor('#f97316', '#ef4444', t);
+      return lerpColor('#f97316', '#ef4444', (ratio - 0.66) / 0.34);
     }
   };
 
@@ -97,57 +108,212 @@ export default function FloorPlan({ floor, onComponentClick }: FloorPlanProps) {
 
   const handleMouseUp = () => setIsPanning(false);
 
+  const handleCompEnter = (comp: Component, e: React.MouseEvent) => {
+    setHoveredComp(comp);
+    setTooltipPos({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleCompMove = (e: React.MouseEvent) => {
+    setTooltipPos({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleCompLeave = () => {
+    setHoveredComp(null);
+  };
+
+  const handleCompClick = (comp: Component) => {
+    setSelectedId(comp.id === selectedId ? null : comp.id);
+    onComponentClick?.(comp);
+  };
+
   if (components.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+      <div className="flex items-center justify-center h-full text-gray-500 text-sm">
         No components for floor {floor}
       </div>
     );
   }
 
-  return (
-    <svg
-      ref={svgRef}
-      viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`}
-      className="w-full h-full"
-      style={{ transform: 'scaleY(-1)', cursor: isPanning ? 'grabbing' : 'grab' }}
-      onWheel={handleWheel}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
-    >
-      {components.map((c) => {
-        const hasBbox = c.bbox_min_x != null && c.bbox_max_x != null;
-        const rectW = hasBbox ? (c.bbox_max_x! - c.bbox_min_x!) : 1;
-        const rectH = hasBbox ? (c.bbox_max_y! - c.bbox_min_y!) : 1;
-        const rx = hasBbox ? c.bbox_min_x! : c.x - 0.5;
-        const ry = hasBbox ? c.bbox_min_y! : c.y - 0.5;
-        const compDefects = defectMap.get(c.id) || [];
+  const hoveredDefects = hoveredComp ? defectMap.get(hoveredComp.id) || [] : [];
 
-        return (
-          <g key={c.id} onClick={() => onComponentClick?.(c)} className="cursor-pointer">
-            <rect
-              x={rx}
-              y={ry}
-              width={Math.abs(rectW) || 1}
-              height={Math.abs(rectH) || 1}
-              fill={getColor(c)}
-              stroke="#334155"
-              strokeWidth={0.05}
-              opacity={0.7}
+  return (
+    <div className="relative w-full h-full bg-surface-950">
+      {/* ── Top controls bar ── */}
+      <div className="absolute top-3 left-3 z-20 flex items-center gap-2">
+        <button
+          onClick={() => setHeatmapOn(!heatmapOn)}
+          className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${
+            heatmapOn
+              ? 'bg-neon-orange/15 text-orange-400 border-neon-orange/40 shadow-glow-orange'
+              : 'bg-surface-800 text-gray-400 border-surface-600 hover:border-surface-500'
+          }`}
+        >
+          {heatmapOn ? '🔥 Heat Map ON' : 'Heat Map OFF'}
+        </button>
+        <span className="text-[10px] text-gray-500">
+          {components.length} components · {defects.length} defects
+        </span>
+      </div>
+
+      {/* ── Heat map legend ── */}
+      {heatmapOn && (
+        <div className="absolute bottom-3 left-3 z-20 flex items-center gap-1.5 bg-surface-900/90 backdrop-blur-sm rounded-lg px-3 py-2 border border-surface-600">
+          <span className="text-[10px] text-gray-500 mr-1">Defects</span>
+          {HEAT_STEPS.map((s, i) => (
+            <div key={i} className="flex flex-col items-center gap-0.5">
+              <div
+                className="w-5 h-2.5 rounded-sm"
+                style={{ backgroundColor: s.color }}
+              />
+              {s.label && (
+                <span className="text-[9px] text-gray-500">{s.label}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Severity legend ── */}
+      <div className="absolute bottom-3 right-3 z-20 flex items-center gap-2 bg-surface-900/90 backdrop-blur-sm rounded-lg px-3 py-2 border border-surface-600">
+        {Object.entries(SEVERITY_HEX).map(([sev, hex]) => (
+          <div key={sev} className="flex items-center gap-1">
+            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: hex }} />
+            <span className="text-[10px] text-gray-400 capitalize">{sev}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* ── SVG Floor Plan ── */}
+      <svg
+        ref={svgRef}
+        viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`}
+        className="w-full h-full"
+        style={{ transform: 'scaleY(-1)', cursor: isPanning ? 'grabbing' : 'grab' }}
+        onWheel={handleWheel}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+      >
+        {/* Grid pattern */}
+        <defs>
+          <pattern id="fp-grid" width="5" height="5" patternUnits="userSpaceOnUse">
+            <path d="M 5 0 L 0 0 0 5" fill="none" stroke="#1e293b" strokeWidth="0.03" />
+          </pattern>
+        </defs>
+        <rect
+          x={viewBox.x}
+          y={viewBox.y}
+          width={viewBox.w}
+          height={viewBox.h}
+          fill="url(#fp-grid)"
+        />
+
+        {components.map((c) => {
+          const hasBbox = c.bbox_min_x != null && c.bbox_max_x != null;
+          const rectW = hasBbox ? (c.bbox_max_x! - c.bbox_min_x!) : 1;
+          const rectH = hasBbox ? (c.bbox_max_y! - c.bbox_min_y!) : 1;
+          const rx = hasBbox ? c.bbox_min_x! : c.x - 0.5;
+          const ry = hasBbox ? c.bbox_min_y! : c.y - 0.5;
+          const isSelected = c.id === selectedId;
+          const compDefects = defectMap.get(c.id) || [];
+          const fillColor = getColor(c);
+
+          return (
+            <g
+              key={c.id}
+              onClick={() => handleCompClick(c)}
+              onMouseEnter={(e) => handleCompEnter(c, e)}
+              onMouseMove={handleCompMove}
+              onMouseLeave={handleCompLeave}
+              className="cursor-pointer"
             >
-              <title>
-                {c.name} ({c.type})
-                {'\n'}Defects: {compDefects.length}
-                {compDefects.length > 0 &&
-                  '\n' + compDefects.map((d) => `#${d.id} ${d.defect_class} (${d.severity})`).join('\n')}
-              </title>
-            </rect>
-          </g>
-        );
-      })}
-    </svg>
+              {/* Glow ring for selected */}
+              {isSelected && (
+                <rect
+                  x={rx - 0.15}
+                  y={ry - 0.15}
+                  width={Math.abs(rectW) + 0.3 || 1.3}
+                  height={Math.abs(rectH) + 0.3 || 1.3}
+                  fill="none"
+                  stroke="#06b6d4"
+                  strokeWidth={0.12}
+                  opacity={0.8}
+                  rx={0.08}
+                />
+              )}
+              <rect
+                x={rx}
+                y={ry}
+                width={Math.abs(rectW) || 1}
+                height={Math.abs(rectH) || 1}
+                fill={fillColor}
+                stroke={isSelected ? '#06b6d4' : '#1e293b'}
+                strokeWidth={isSelected ? 0.08 : 0.04}
+                opacity={0.75}
+                rx={0.05}
+              />
+              {/* Defect count badge */}
+              {heatmapOn && compDefects.length > 0 && Math.abs(rectW) > 0.6 && (
+                <g style={{ transform: 'scaleY(-1)' }} transform={`translate(${rx + Math.abs(rectW) / 2}, ${-(ry + Math.abs(rectH) / 2)})`}>
+                  <circle r={0.3} fill="#0f172a" opacity={0.85} />
+                  <text
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fill="#f87171"
+                    fontSize={0.35}
+                    fontWeight="bold"
+                  >
+                    {compDefects.length}
+                  </text>
+                </g>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+
+      {/* ── Rich tooltip ── */}
+      {hoveredComp && (
+        <div
+          className="fixed z-50 pointer-events-none"
+          style={{ left: tooltipPos.x + 14, top: tooltipPos.y - 10 }}
+        >
+          <div className="bg-surface-800 border border-surface-600 rounded-lg px-3 py-2 shadow-xl min-w-[180px] max-w-[260px]">
+            <p className="text-xs font-semibold text-gray-200 truncate">
+              {hoveredComp.name}
+            </p>
+            <p className="text-[10px] text-gray-500 mb-1.5">{hoveredComp.type}</p>
+
+            {hoveredDefects.length === 0 ? (
+              <p className="text-[10px] text-gray-500">No defects</p>
+            ) : (
+              <div className="space-y-1">
+                <p className="text-[10px] text-gray-400 font-medium">
+                  {hoveredDefects.length} defect{hoveredDefects.length > 1 ? 's' : ''}:
+                </p>
+                {hoveredDefects.slice(0, 5).map((d) => (
+                  <div key={d.id} className="flex items-center gap-1.5 text-[10px]">
+                    <span
+                      className="w-1.5 h-1.5 rounded-full shrink-0"
+                      style={{ backgroundColor: SEVERITY_HEX[d.severity] || '#64748b' }}
+                    />
+                    <span className="text-gray-300">#{d.id}</span>
+                    <span className="text-gray-400">{d.defect_class}</span>
+                    <span className="text-gray-500 capitalize">{d.severity}</span>
+                  </div>
+                ))}
+                {hoveredDefects.length > 5 && (
+                  <p className="text-[9px] text-gray-500">
+                    +{hoveredDefects.length - 5} more
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

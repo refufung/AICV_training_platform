@@ -437,8 +437,8 @@ export default function BimViewerPage() {
             onClick={() => setViewMode('3d')}
             className={`flex items-center gap-1 px-2.5 py-1 text-xs rounded transition-colors ${
               viewMode === '3d'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                ? 'bg-neon-cyan/20 text-cyan-400 ring-1 ring-neon-cyan/40'
+                : 'bg-surface-800 text-gray-400 hover:bg-surface-700'
             }`}
           >
             <Cuboid size={14} />
@@ -448,8 +448,8 @@ export default function BimViewerPage() {
             onClick={() => setViewMode('2d')}
             className={`flex items-center gap-1 px-2.5 py-1 text-xs rounded transition-colors ${
               viewMode === '2d'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                ? 'bg-neon-cyan/20 text-cyan-400 ring-1 ring-neon-cyan/40'
+                : 'bg-surface-800 text-gray-400 hover:bg-surface-700'
             }`}
           >
             <MapIcon size={14} />
@@ -460,15 +460,15 @@ export default function BimViewerPage() {
 
       {/* 2D floor selector bar */}
       {viewMode === '2d' && (
-        <div className="flex gap-1.5 px-3 py-1.5 bg-gray-900/80 border-b border-gray-700/50">
+        <div className="flex gap-1.5 px-3 py-1.5 bg-surface-900/80 border-b border-surface-700/50">
           {floors.map((f) => (
             <button
               key={f}
               onClick={() => setActiveFloor(f)}
               className={`px-3 py-0.5 text-xs rounded transition-colors ${
                 activeFloor === f
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                  ? 'bg-neon-cyan/20 text-cyan-400 ring-1 ring-neon-cyan/40'
+                  : 'bg-surface-800 text-gray-400 hover:bg-surface-700'
               }`}
             >
               {f}
