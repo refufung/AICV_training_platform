@@ -58,6 +58,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 def list_ifc_files():
     """Return available IFC files."""
     ifc_files = sorted(PROJECT_ROOT.glob("*.ifc"))
+    ifc_dir = PROJECT_ROOT / "ifc"
+    if ifc_dir.is_dir():
+        ifc_files += sorted(ifc_dir.glob("*.ifc"))
     return [{"name": f.name, "size_mb": round(f.stat().st_size / 1_048_576, 1)} for f in ifc_files]
 
 
@@ -67,6 +70,9 @@ def download_ifc(filename: str):
     # Prevent path traversal
     safe_name = Path(filename).name
     filepath = PROJECT_ROOT / safe_name
+    if not filepath.exists() or not filepath.suffix.lower() == ".ifc":
+        # Also check the ifc/ subdirectory
+        filepath = PROJECT_ROOT / "ifc" / safe_name
     if not filepath.exists() or not filepath.suffix.lower() == ".ifc":
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="IFC file not found")
