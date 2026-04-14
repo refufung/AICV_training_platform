@@ -14,11 +14,11 @@ import LoginPage from './pages/LoginPage';
 import type { Notification } from './types';
 
 const navItems = [
+  { to: '/map', icon: Map, label: 'Map' },
   { to: '/', icon: BarChart3, label: 'Dashboard' },
   { to: '/bim', icon: Building2, label: 'BIM Viewer' },
   { to: '/defects', icon: List, label: 'Defects' },
   { to: '/capture', icon: Camera, label: 'Capture' },
-  { to: '/map', icon: Map, label: 'Map' },
   { to: '/reports', icon: FileDown, label: 'Reports' },
 ];
 
@@ -52,7 +52,8 @@ function App() {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
-  if (!token) return <LoginPage />;
+  // Skip login — go straight to dashboard
+  // if (!token) return <LoginPage />;
 
   return (
     <div className="flex h-screen bg-gray-100">

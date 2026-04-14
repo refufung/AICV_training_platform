@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
-import fragmentsWorkerUrl from '@thatopen/fragments/dist/Worker/worker.mjs?url';
+import fragmentsWorkerUrl from '@thatopen/fragments/worker?url';
 
 interface BimViewerProps {
   ifcUrl?: string;
@@ -55,7 +55,9 @@ export default function BimViewer({ ifcUrl, onComponentClick, highlightIds = [] 
       const loadIfc = async () => {
         try {
           const ifcLoader = components.get(OBC.IfcLoader);
-          await ifcLoader.setup();
+          await ifcLoader.setup({ autoSetWasm: false });
+          ifcLoader.settings.wasm.path = '/';
+          ifcLoader.settings.wasm.absolute = true;
 
           const response = await fetch(ifcUrl);
           if (!response.ok) throw new Error(`Failed to fetch IFC: ${response.status}`);
