@@ -1,0 +1,45 @@
+# ============================================================
+# BIM Defect Management Platform — Python Dependencies
+# Install: pip install -r requirements.txt
+# ============================================================
+
+# --- Web Framework ---
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9
+
+# --- Database ---
+sqlalchemy>=2.0.25
+geoalchemy2>=0.14.3
+psycopg2-binary>=2.9.9
+alembic>=1.13.1
+
+# --- Auth ---
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+
+# --- BIM / IFC ---
+ifcopenshell>=0.7.0
+
+# --- Data Science ---
+numpy>=1.26.0
+pandas>=2.2.0
+scipy>=1.12.0
+scikit-learn>=1.4.0
+
+# --- Image Processing ---
+opencv-python>=4.9.0
+Pillow>=10.2.0
+scikit-image>=0.22.0
+
+# --- Visualization ---
+matplotlib>=3.8.0
+
+# --- BIM Collaboration ---
+# bcf-client  # uncomment if available on PyPI
+
+# --- Utilities ---
+pydantic>=2.6.0
+python-dotenv>=1.0.0
+httpx>=0.27.0
+aiofiles>=23.2.0

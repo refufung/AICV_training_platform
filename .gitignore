@@ -1,0 +1,53 @@
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Node
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Environment
+.env
+.env.local
+*.env
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+
+# Database
+*.db
+.DS_Store
+
+# Uploads & data (large files)
+backend/uploads/*.jpg
+backend/uploads/*.png
+datasets/concrete_crack/images/
+datasets/codebrim/images/
+datasets/sdnet2018/images/
+models/weights/*.pt
+models/weights/*.onnx
+models/exports/*.onnx
+
+# Blender
+*.blend1
+blender/clean_views/*.png
+
+# IFC files (large — track with Git LFS)
+# *.ifc
+
+# Logs
+*.log
