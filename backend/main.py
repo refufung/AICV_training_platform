@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-from backend.routes import auth, defects, components, reports, locate, notifications
+from backend.routes import auth, defects, components, reports, locate, notifications, bcf
 
 app = FastAPI(
     title="AI Building Inspection API",
@@ -43,6 +43,7 @@ app.include_router(components.router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
 app.include_router(locate.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
+app.include_router(bcf.router, prefix="/api")
 
 
 @app.get("/api/health")

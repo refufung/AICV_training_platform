@@ -1,4 +1,4 @@
-import type { Defect, DefectCreate, DefectStats, Component, AuthToken, Notification, LocateResult } from '../types';
+import type { Defect, DefectCreate, DefectStats, Component, AuthToken, Notification, LocateResult, BcfTopic, BcfTopicCreate } from '../types';
 
 const BASE = '/api';
 
@@ -157,4 +157,49 @@ export async function bulkUpdateDefects(ids: number[], updates: Partial<Defect>)
     results.push(d);
   }
   return results;
+}
+
+// --- BCF Topics ---
+export async function getBcfTopics(): Promise<BcfTopic[]> {
+  return request<BcfTopic[]>('/bcf/topics');
+}
+
+export async function createBcfTopic(data: BcfTopicCreate): Promise<BcfTopic> {
+  return request<BcfTopic>('/bcf/topics', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateBcfTopic(id: number, data: Partial<BcfTopic>): Promise<BcfTopic> {
+  return request<BcfTopic>(`/bcf/topics/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteBcfTopic(id: number): Promise<void> {
+  await request(`/bcf/topics/${id}`, { method: 'DELETE' });
+}
+
+export async function addBcfComment(topicId: number, text: string, author?: string): Promise<unknown> {
+  return request(`/bcf/topics/${topicId}/comments`, {
+    method: 'POST',
+    body: JSON.stringify({ text, author }),
+  });
+}
+
+export async function exportBcfTopics(): Promise<Blob> {
+  const token = localStorage.getItem('token');
+  const res = await fetch(`${BASE}/bcf/export`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error('BCF export failed');
+  return res.blob();
+}
+
+export async function importBcfTopics(file: File): Promise<{ imported: number }> {
+  const form = new FormData();
+  form.append('file', file);
+  return request<{ imported: number }>('/bcf/import', { method: 'POST', body: form });
 }

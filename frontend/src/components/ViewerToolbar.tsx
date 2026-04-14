@@ -12,6 +12,8 @@ import {
   Move,
   Orbit,
   Layers,
+  Filter,
+  MessageSquare,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -32,6 +34,10 @@ interface ViewerToolbarProps {
   sectionOn?: boolean;
   measureOn?: boolean;
   floorPlanOn?: boolean;
+  onToggleFilter?: () => void;
+  filterOn?: boolean;
+  onToggleBcf?: () => void;
+  bcfOn?: boolean;
 }
 
 interface ToolButton {
@@ -67,6 +73,10 @@ export default function ViewerToolbar({
   sectionOn = false,
   measureOn = false,
   floorPlanOn = false,
+  onToggleFilter,
+  filterOn = false,
+  onToggleBcf,
+  bcfOn = false,
 }: ViewerToolbarProps) {
   const [tooltip, setTooltip] = useState('');
 
@@ -91,6 +101,8 @@ export default function ViewerToolbar({
     { id: 'section', icon: Scissors, label: 'Section Plane', action: () => onToggleSection?.(), active: sectionOn },
     { id: 'measure', icon: Ruler, label: 'Measure', action: () => onToggleMeasure?.(), active: measureOn },
     { id: 'floorplan', icon: Layers, label: 'Floor Plan (樓層平面)', action: () => onToggleFloorPlan?.(), active: floorPlanOn },
+    { id: 'filter', icon: Filter, label: 'Filter & Colorize', action: () => onToggleFilter?.(), active: filterOn },
+    { id: 'bcf', icon: MessageSquare, label: 'BCF Topics', action: () => onToggleBcf?.(), active: bcfOn },
     { separator: true, id: 'sep4' },
     { id: 'reset', icon: RotateCcw, label: 'Reset View', action: () => onResetView?.() },
   ];

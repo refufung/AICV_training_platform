@@ -1,11 +1,15 @@
 import { useState, useEffect } from 'react';
-import { Scissors, X, ChevronUp, ChevronDown } from 'lucide-react';
+import { Scissors, X, ChevronUp, ChevronDown, Trash2 } from 'lucide-react';
+import type { SectionPlaneInfo } from './BimViewer';
 
 interface SectionPlaneControlProps {
   minY: number;
   maxY: number;
   onHeightChange: (y: number) => void;
   onClose: () => void;
+  sectionPlanes?: SectionPlaneInfo[];
+  onRemovePlane?: (id: string) => void;
+  onClearPlanes?: () => void;
 }
 
 export default function SectionPlaneControl({
@@ -13,6 +17,9 @@ export default function SectionPlaneControl({
   maxY,
   onHeightChange,
   onClose,
+  sectionPlanes = [],
+  onRemovePlane,
+  onClearPlanes,
 }: SectionPlaneControlProps) {
   const range = maxY - minY;
   const [value, setValue] = useState(maxY);
@@ -97,6 +104,38 @@ export default function SectionPlaneControl({
         {/* Height label */}
         <div className="text-[10px] text-gray-500 font-mono">
           {value.toFixed(1)}m
+        </div>
+
+        {/* Section planes list */}
+        {sectionPlanes.length > 0 && (
+          <div className="w-full border-t border-gray-700 pt-2 mt-1 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-gray-400 font-medium">Surface Cuts</span>
+              <button
+                onClick={onClearPlanes}
+                className="text-[10px] text-gray-500 hover:text-red-400 transition-colors"
+              >
+                Clear
+              </button>
+            </div>
+            {sectionPlanes.map(p => (
+              <div key={p.id} className="flex items-center gap-1.5 text-[11px]">
+                <div className="w-2 h-2 rounded-full bg-cyan-400 shrink-0" />
+                <span className="text-gray-300 flex-1 truncate">{p.label}</span>
+                <button
+                  onClick={() => onRemovePlane?.(p.id)}
+                  className="text-gray-500 hover:text-red-400 p-0.5 shrink-0"
+                >
+                  <Trash2 size={11} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Hint */}
+        <div className="text-[9px] text-gray-600 text-center mt-1 leading-tight">
+          Double-click a surface to add a cut
         </div>
       </div>
     </div>

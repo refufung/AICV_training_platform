@@ -26,6 +26,18 @@ export interface BimViewerHandle {
   deleteMeasurement: (id: string) => void;
   showFloorPlan: (bottomY: number, topY: number) => void;
   exitFloorPlan: () => void;
+  colorByDefects: (severityMap: Map<string, string>) => void;
+  clearDefectColors: () => void;
+  hideElements: (meshIds: number[]) => void;
+  isolateElement: (meshId: number) => void;
+  showAllElements: () => void;
+  zoomToElement: (meshId: number) => void;
+  applyColorFilters: (filters: ColorFilter[]) => void;
+  resetColorFilters: () => void;
+  removeSectionPlane: (id: string) => void;
+  clearSectionPlanes: () => void;
+  captureViewpoint: () => string | null;
+  restoreViewpoint: (viewpointJson: string) => void;
 }
 
 export interface StoreyInfo {
@@ -46,6 +58,36 @@ export interface SelectedElement {
   groups: IfcPropertyGroup[];
 }
 
+export interface DefectMarker {
+  id: number;
+  x: number;
+  y: number;
+  z: number;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  label: string;
+}
+
+export interface ContextMenuInfo {
+  screenX: number;
+  screenY: number;
+  meshId: number;
+  meshName: string;
+  globalId: string;
+  expressId: number;
+}
+
+export interface ColorFilter {
+  type: 'class' | 'storey' | 'text';
+  value: string;
+  color: number;
+  elevationRange?: [number, number];
+}
+
+export interface SectionPlaneInfo {
+  id: string;
+  label: string;
+}
+
 interface BimViewerProps {
   ifcUrl?: string;
   onComponentClick?: (globalId: string) => void;
@@ -53,12 +95,23 @@ interface BimViewerProps {
   onMeasurement?: (measurement: { id: string; points: { x: number; y: number; z: number }[]; distance: number }) => void;
   onElementSelected?: (element: SelectedElement | null) => void;
   onStoreysLoaded?: (storeys: StoreyInfo[]) => void;
+  onDefectMarkerClick?: (defectId: number) => void;
+  onContextMenu?: (info: ContextMenuInfo) => void;
+  onSectionPlanesChanged?: (planes: SectionPlaneInfo[]) => void;
+  defectMarkers?: DefectMarker[];
   measureActive?: boolean;
   highlightIds?: string[];
 }
 
+const SEVERITY_COLORS: Record<string, number> = {
+  low: 0x22c55e,
+  medium: 0xeab308,
+  high: 0xf97316,
+  critical: 0xef4444,
+};
+
 const BimViewer = forwardRef<BimViewerHandle, BimViewerProps>(
-  function BimViewer({ ifcUrl, onModelLoaded, onMeasurement, onElementSelected, onStoreysLoaded }, ref) {
+  function BimViewer({ ifcUrl, onModelLoaded, onMeasurement, onElementSelected, onStoreysLoaded, onDefectMarkerClick, onContextMenu: onCtxMenuProp, onSectionPlanesChanged, defectMarkers }, ref) {
     const containerRef = useRef<HTMLDivElement>(null);
     const engineRef = useRef<OBC.Components | null>(null);
     const worldRef = useRef<OBC.SimpleWorld<OBC.SimpleScene, OBC.SimpleCamera, OBC.SimpleRenderer> | null>(null);
@@ -82,6 +135,15 @@ const BimViewer = forwardRef<BimViewerHandle, BimViewerProps>(
     ]);
     const savedCameraRef = useRef<{ pos: THREE.Vector3; target: THREE.Vector3 } | null>(null);
     const floorPlanActiveRef = useRef(false);
+    const defectMarkerGroupRef = useRef<THREE.Group>(new THREE.Group());
+    const defectMarkerMeshesRef = useRef<Map<number, THREE.Sprite>>(new Map());
+    const defectColoredRef = useRef<Map<number, THREE.Material | THREE.Material[]>>(new Map());
+    const hiddenMeshIdsRef = useRef<Set<number>>(new Set());
+    const filterColoredRef = useRef<Map<number, THREE.Material | THREE.Material[]>>(new Map());
+    const fadedMeshesRef = useRef<Map<number, THREE.Material | THREE.Material[]>>(new Map());
+    const sectionPlanesRef = useRef<Map<string, { plane: THREE.Plane; helper: THREE.PlaneHelper }>>(new Map());
+    const sectionActiveRef = useRef(false);
+    const sectionIdCounter = useRef(0);
     const [loading, setLoading] = useState(false);
     const [loadProgress, setLoadProgress] = useState('');
     const [error, setError] = useState('');
@@ -117,9 +179,11 @@ const BimViewer = forwardRef<BimViewerHandle, BimViewerProps>(
         const world = worldRef.current;
         if (!world) return;
         if (!world.renderer) return;
+        sectionActiveRef.current = true;
         const renderer = world.renderer.three;
         const plane = clipPlaneRef.current;
-        renderer.clippingPlanes = [plane];
+        const customPlanes = Array.from(sectionPlanesRef.current.values()).map(sp => sp.plane);
+        renderer.clippingPlanes = [plane, ...customPlanes];
         // Add visual helper plane
         if (!clipHelperRef.current) {
           const box = modelBoxRef.current;
@@ -133,10 +197,19 @@ const BimViewer = forwardRef<BimViewerHandle, BimViewerProps>(
       disableSectionPlane: () => {
         const world = worldRef.current;
         if (!world || !world.renderer) return;
+        sectionActiveRef.current = false;
         world.renderer.three.clippingPlanes = [];
         if (clipHelperRef.current) {
           clipHelperRef.current.visible = false;
         }
+        // Clean up custom section planes
+        sectionPlanesRef.current.forEach(({ helper }) => {
+          world.scene.three.remove(helper);
+          helper.geometry.dispose();
+          (helper.material as THREE.Material).dispose();
+        });
+        sectionPlanesRef.current.clear();
+        onSectionPlanesChanged?.([]);
       },
       setSectionHeight: (y: number) => {
         // Plane normal (0, -1, 0) with constant = y means clip everything above y
@@ -252,6 +325,261 @@ const BimViewer = forwardRef<BimViewerHandle, BimViewerProps>(
           savedCameraRef.current = null;
         }
       },
+      colorByDefects: (severityMap: Map<string, string>) => {
+        const world = worldRef.current;
+        if (!world) return;
+
+        // First clear any existing defect colors
+        defectColoredRef.current.forEach((mat, objId) => {
+          const obj = world.scene.three.getObjectById(objId) as THREE.Mesh | undefined;
+          if (obj) obj.material = mat as THREE.Material;
+        });
+        defectColoredRef.current.clear();
+
+        // Apply coloring to meshes matching the severityMap keys (GlobalId or Name)
+        world.scene.three.traverse((obj) => {
+          if (!(obj instanceof THREE.Mesh)) return;
+          const ud = obj.userData;
+          if (!ud) return;
+          const gid = ud.GlobalId as string | undefined;
+          const name = (ud.Name as string | undefined) || obj.name;
+          const sev = (gid && severityMap.get(gid)) || (name && severityMap.get(name));
+          if (!sev) return;
+
+          const color = SEVERITY_COLORS[sev] ?? 0xef4444;
+          defectColoredRef.current.set(obj.id, obj.material as THREE.Material);
+          obj.material = new THREE.MeshBasicMaterial({
+            color,
+            transparent: true,
+            opacity: 0.7,
+          });
+        });
+      },
+      clearDefectColors: () => {
+        const world = worldRef.current;
+        if (!world) return;
+        defectColoredRef.current.forEach((mat, objId) => {
+          const obj = world.scene.three.getObjectById(objId) as THREE.Mesh | undefined;
+          if (obj) obj.material = mat as THREE.Material;
+        });
+        defectColoredRef.current.clear();
+      },
+      hideElements: (meshIds: number[]) => {
+        const world = worldRef.current;
+        if (!world) return;
+        for (const id of meshIds) {
+          const obj = world.scene.three.getObjectById(id);
+          if (obj) {
+            obj.visible = false;
+            hiddenMeshIdsRef.current.add(id);
+          }
+        }
+      },
+      isolateElement: (meshId: number) => {
+        const world = worldRef.current;
+        if (!world) return;
+        hiddenMeshIdsRef.current.forEach((id) => {
+          const obj = world.scene.three.getObjectById(id);
+          if (obj) obj.visible = true;
+        });
+        hiddenMeshIdsRef.current.clear();
+        world.scene.three.traverse((obj) => {
+          if (!(obj instanceof THREE.Mesh)) return;
+          if (measureGroupRef.current.getObjectById(obj.id)) return;
+          if (defectMarkerGroupRef.current.getObjectById(obj.id)) return;
+          if (obj.id === meshId) return;
+          obj.visible = false;
+          hiddenMeshIdsRef.current.add(obj.id);
+        });
+      },
+      showAllElements: () => {
+        const world = worldRef.current;
+        if (!world) return;
+        hiddenMeshIdsRef.current.forEach((id) => {
+          const obj = world.scene.three.getObjectById(id);
+          if (obj) obj.visible = true;
+        });
+        hiddenMeshIdsRef.current.clear();
+      },
+      zoomToElement: (meshId: number) => {
+        const world = worldRef.current;
+        if (!world) return;
+        const obj = world.scene.three.getObjectById(meshId);
+        if (!obj) return;
+        const box = new THREE.Box3().setFromObject(obj);
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z, 1);
+        world.camera.controls.setLookAt(
+          center.x + maxDim * 1.5, center.y + maxDim * 1.5, center.z + maxDim * 1.5,
+          center.x, center.y, center.z,
+          true,
+        );
+      },
+      applyColorFilters: (filters: ColorFilter[]) => {
+        const world = worldRef.current;
+        if (!world) return;
+        // Restore previous filter colors
+        filterColoredRef.current.forEach((mat, objId) => {
+          const obj = world.scene.three.getObjectById(objId) as THREE.Mesh | undefined;
+          if (obj) obj.material = mat as THREE.Material;
+        });
+        filterColoredRef.current.clear();
+        fadedMeshesRef.current.forEach((mat, objId) => {
+          const obj = world.scene.three.getObjectById(objId) as THREE.Mesh | undefined;
+          if (obj) obj.material = mat as THREE.Material;
+        });
+        fadedMeshesRef.current.clear();
+        if (filters.length === 0) return;
+        const matchedMeshes = new Map<number, number>();
+        world.scene.three.traverse((obj) => {
+          if (!(obj instanceof THREE.Mesh)) return;
+          if (measureGroupRef.current.getObjectById(obj.id)) return;
+          if (defectMarkerGroupRef.current.getObjectById(obj.id)) return;
+          const ud = obj.userData || {};
+          const meshType = ((ud.type || ud.ObjectType || '') as string).toLowerCase();
+          const meshName = ((ud.Name || obj.name || '') as string).toLowerCase();
+          const meshGid = ((ud.GlobalId || '') as string).toLowerCase();
+          const meshTag = ((ud.Tag || '') as string).toLowerCase();
+          for (const f of filters) {
+            let matches = false;
+            const val = f.value.toLowerCase();
+            if (f.type === 'class') {
+              matches = meshType === val || meshType === 'ifc' + val || meshType.includes(val);
+            } else if (f.type === 'storey' && f.elevationRange) {
+              const pos = new THREE.Vector3();
+              obj.getWorldPosition(pos);
+              matches = pos.y >= f.elevationRange[0] && pos.y < f.elevationRange[1];
+            } else if (f.type === 'text') {
+              matches = meshName.includes(val) || meshGid.includes(val) || meshTag.includes(val) || meshType.includes(val);
+            }
+            if (matches) {
+              matchedMeshes.set(obj.id, f.color);
+              break;
+            }
+          }
+        });
+        // Apply colors to matched, fade non-matched
+        world.scene.three.traverse((obj) => {
+          if (!(obj instanceof THREE.Mesh)) return;
+          if (measureGroupRef.current.getObjectById(obj.id)) return;
+          if (defectMarkerGroupRef.current.getObjectById(obj.id)) return;
+          const matchColor = matchedMeshes.get(obj.id);
+          if (matchColor !== undefined) {
+            filterColoredRef.current.set(obj.id, obj.material as THREE.Material);
+            obj.material = new THREE.MeshBasicMaterial({ color: matchColor, transparent: true, opacity: 0.85 });
+          } else {
+            fadedMeshesRef.current.set(obj.id, obj.material as THREE.Material);
+            obj.material = new THREE.MeshBasicMaterial({ color: 0x888888, transparent: true, opacity: 0.12 });
+          }
+        });
+      },
+      resetColorFilters: () => {
+        const world = worldRef.current;
+        if (!world) return;
+        filterColoredRef.current.forEach((mat, objId) => {
+          const obj = world.scene.three.getObjectById(objId) as THREE.Mesh | undefined;
+          if (obj) obj.material = mat as THREE.Material;
+        });
+        filterColoredRef.current.clear();
+        fadedMeshesRef.current.forEach((mat, objId) => {
+          const obj = world.scene.three.getObjectById(objId) as THREE.Mesh | undefined;
+          if (obj) obj.material = mat as THREE.Material;
+        });
+        fadedMeshesRef.current.clear();
+      },
+      removeSectionPlane: (id: string) => {
+        const world = worldRef.current;
+        if (!world || !world.renderer) return;
+        const entry = sectionPlanesRef.current.get(id);
+        if (entry) {
+          world.scene.three.remove(entry.helper);
+          entry.helper.geometry.dispose();
+          (entry.helper.material as THREE.Material).dispose();
+          sectionPlanesRef.current.delete(id);
+          const customPlanes = Array.from(sectionPlanesRef.current.values()).map(sp => sp.plane);
+          world.renderer.three.clippingPlanes = [clipPlaneRef.current, ...customPlanes];
+          const planesInfo = Array.from(sectionPlanesRef.current.keys()).map((k, i) => ({ id: k, label: `Cut #${i + 1}` }));
+          onSectionPlanesChanged?.(planesInfo);
+        }
+      },
+      clearSectionPlanes: () => {
+        const world = worldRef.current;
+        if (!world || !world.renderer) return;
+        sectionPlanesRef.current.forEach(({ helper }) => {
+          world.scene.three.remove(helper);
+          helper.geometry.dispose();
+          (helper.material as THREE.Material).dispose();
+        });
+        sectionPlanesRef.current.clear();
+        world.renderer.three.clippingPlanes = [clipPlaneRef.current];
+        onSectionPlanesChanged?.([]);
+      },
+      captureViewpoint: () => {
+        const world = worldRef.current;
+        if (!world) return null;
+        const cam = world.camera.three;
+        const target = new THREE.Vector3();
+        world.camera.controls.getTarget(target);
+        const clippingPlanes = Array.from(sectionPlanesRef.current.values()).map(sp => ({
+          normal: [sp.plane.normal.x, sp.plane.normal.y, sp.plane.normal.z] as [number, number, number],
+          constant: sp.plane.constant,
+        }));
+        const hidden = Array.from(hiddenMeshIdsRef.current);
+        return JSON.stringify({
+          camera: {
+            position: [cam.position.x, cam.position.y, cam.position.z],
+            target: [target.x, target.y, target.z],
+          },
+          clippingPlanes,
+          hiddenElements: hidden,
+        });
+      },
+      restoreViewpoint: (viewpointJson: string) => {
+        const world = worldRef.current;
+        if (!world || !world.renderer) return;
+        try {
+          const vp = JSON.parse(viewpointJson);
+          if (vp.camera) {
+            const [px, py, pz] = vp.camera.position;
+            const [tx, ty, tz] = vp.camera.target;
+            world.camera.controls.setLookAt(px, py, pz, tx, ty, tz, true);
+          }
+          if (vp.clippingPlanes && vp.clippingPlanes.length > 0) {
+            sectionPlanesRef.current.forEach(({ helper }) => {
+              world.scene.three.remove(helper);
+              helper.geometry.dispose();
+              (helper.material as THREE.Material).dispose();
+            });
+            sectionPlanesRef.current.clear();
+            for (const cp of vp.clippingPlanes) {
+              const normal = new THREE.Vector3(cp.normal[0], cp.normal[1], cp.normal[2]);
+              const plane = new THREE.Plane(normal, cp.constant);
+              const id = `section-${++sectionIdCounter.current}`;
+              const helperSize = modelBoxRef.current ? modelBoxRef.current.getSize(new THREE.Vector3()).length() * 0.5 : 20;
+              const helper = new THREE.PlaneHelper(plane, helperSize, 0x06b6d4);
+              world.scene.three.add(helper);
+              sectionPlanesRef.current.set(id, { plane, helper });
+            }
+            const customPlanes = Array.from(sectionPlanesRef.current.values()).map(sp => sp.plane);
+            world.renderer!.three.clippingPlanes = [clipPlaneRef.current, ...customPlanes];
+          }
+          if (vp.hiddenElements) {
+            hiddenMeshIdsRef.current.forEach((hid) => {
+              const obj = world.scene.three.getObjectById(hid);
+              if (obj) obj.visible = true;
+            });
+            hiddenMeshIdsRef.current.clear();
+            for (const hid of vp.hiddenElements) {
+              const obj = world.scene.three.getObjectById(hid);
+              if (obj) {
+                obj.visible = false;
+                hiddenMeshIdsRef.current.add(hid);
+              }
+            }
+          }
+        } catch { /* invalid viewpoint */ }
+      },
     }), [fitToModel]);
 
     useEffect(() => {
@@ -282,9 +610,31 @@ const BimViewer = forwardRef<BimViewerHandle, BimViewerProps>(
       // Add measurement group to scene
       world.scene.three.add(measureGroupRef.current);
 
+      // Add defect marker group to scene
+      world.scene.three.add(defectMarkerGroupRef.current);
+
       // Raycaster for measurement clicks
       const raycaster = new THREE.Raycaster();
       const mouse = new THREE.Vector2();
+
+      // Click handler for defect markers
+      const onMarkerClick = (event: MouseEvent) => {
+        const rect = container.getBoundingClientRect();
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+        raycaster.setFromCamera(mouse, world.camera.three);
+        const sprites = Array.from(defectMarkerGroupRef.current.children);
+        const hits = raycaster.intersectObjects(sprites, false);
+        if (hits.length > 0) {
+          const defectId = hits[0].object.userData?.defectId;
+          if (defectId != null) {
+            onDefectMarkerClick?.(defectId);
+          }
+        }
+      };
+
+      container.addEventListener('click', onMarkerClick);
 
       const onMeasureClick = (event: MouseEvent) => {
         if (!measureActiveRef.current) return;
@@ -414,6 +764,25 @@ const BimViewer = forwardRef<BimViewerHandle, BimViewerProps>(
         });
         const hits = rc.intersectObjects(meshes, false);
 
+        // If section mode active, create surface section cut on double-click
+        if (sectionActiveRef.current && hits.length > 0 && hits[0].face) {
+          const intersect = hits[0];
+          const normalMatrix = new THREE.Matrix3().getNormalMatrix(intersect.object.matrixWorld);
+          const faceNormal = intersect.face!.normal.clone().applyMatrix3(normalMatrix).normalize().negate();
+          const constant = -faceNormal.dot(intersect.point);
+          const plane = new THREE.Plane(faceNormal, constant);
+          const id = `section-${++sectionIdCounter.current}`;
+          const helperSize = modelBoxRef.current ? modelBoxRef.current.getSize(new THREE.Vector3()).length() * 0.5 : 20;
+          const helper = new THREE.PlaneHelper(plane, helperSize, 0x06b6d4);
+          world.scene.three.add(helper);
+          sectionPlanesRef.current.set(id, { plane, helper });
+          const customPlanes = Array.from(sectionPlanesRef.current.values()).map(sp => sp.plane);
+          world.renderer!.three.clippingPlanes = [clipPlaneRef.current, ...customPlanes];
+          const planesInfo = Array.from(sectionPlanesRef.current.keys()).map((k, i) => ({ id: k, label: `Cut #${i + 1}` }));
+          onSectionPlanesChanged?.(planesInfo);
+          return;
+        }
+
         // Restore previous highlight
         originalMaterialsRef.current.forEach((mat, objId) => {
           const obj = world.scene.three.getObjectById(objId) as THREE.Mesh | undefined;
@@ -516,6 +885,39 @@ const BimViewer = forwardRef<BimViewerHandle, BimViewerProps>(
       };
 
       container.addEventListener('dblclick', onSelectClick);
+
+      // Right-click context menu handler
+      const onCtxMenu = (event: MouseEvent) => {
+        event.preventDefault();
+        const rect = container.getBoundingClientRect();
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        raycaster.setFromCamera(mouse, world.camera.three);
+        const ctxMeshes: THREE.Mesh[] = [];
+        world.scene.three.traverse((obj) => {
+          if (
+            obj instanceof THREE.Mesh &&
+            obj.visible &&
+            !measureGroupRef.current.getObjectById(obj.id) &&
+            !defectMarkerGroupRef.current.getObjectById(obj.id)
+          ) {
+            ctxMeshes.push(obj);
+          }
+        });
+        const ctxHits = raycaster.intersectObjects(ctxMeshes, false);
+        if (ctxHits.length > 0) {
+          const hitObj = ctxHits[0].object as THREE.Mesh;
+          onCtxMenuProp?.({
+            screenX: event.clientX,
+            screenY: event.clientY,
+            meshId: hitObj.id,
+            meshName: hitObj.name || hitObj.userData?.Name || 'Element',
+            globalId: hitObj.userData?.GlobalId || '',
+            expressId: hitObj.userData?.expressID ?? hitObj.id,
+          });
+        }
+      };
+      container.addEventListener('contextmenu', onCtxMenu);
 
       const grids = components.get(OBC.Grids);
       grids.create(world);
@@ -627,12 +1029,85 @@ const BimViewer = forwardRef<BimViewerHandle, BimViewerProps>(
 
       return () => {
         disposed = true;
+        container.removeEventListener('click', onMarkerClick);
         container.removeEventListener('click', onMeasureClick);
         container.removeEventListener('dblclick', onSelectClick);
+        container.removeEventListener('contextmenu', onCtxMenu);
         highlightMaterial.dispose();
         components.dispose();
       };
     }, [ifcUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Sync defect markers into 3D scene
+    useEffect(() => {
+      const world = worldRef.current;
+      if (!world) return;
+      const group = defectMarkerGroupRef.current;
+      const meshMap = defectMarkerMeshesRef.current;
+
+      // Remove old markers
+      meshMap.forEach((sprite) => {
+        group.remove(sprite);
+        sprite.material.map?.dispose();
+        sprite.material.dispose();
+      });
+      meshMap.clear();
+
+      if (!defectMarkers || defectMarkers.length === 0) return;
+
+      for (const dm of defectMarkers) {
+        const color = SEVERITY_COLORS[dm.severity] ?? 0xef4444;
+
+        // Create pin sprite using canvas
+        const canvas = document.createElement('canvas');
+        canvas.width = 64;
+        canvas.height = 80;
+        const ctx = canvas.getContext('2d')!;
+
+        // Pin shape: circle + triangle
+        const hexColor = '#' + color.toString(16).padStart(6, '0');
+        ctx.fillStyle = hexColor;
+        ctx.beginPath();
+        ctx.arc(32, 28, 22, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Triangle pointer
+        ctx.beginPath();
+        ctx.moveTo(18, 42);
+        ctx.lineTo(46, 42);
+        ctx.lineTo(32, 72);
+        ctx.closePath();
+        ctx.fill();
+
+        // White inner circle
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(32, 28, 10, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Exclamation mark
+        ctx.fillStyle = hexColor;
+        ctx.font = 'bold 16px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('!', 32, 28);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        const mat = new THREE.SpriteMaterial({
+          map: texture,
+          depthTest: false,
+          transparent: true,
+        });
+        const sprite = new THREE.Sprite(mat);
+        sprite.position.set(dm.x, dm.y + 1.5, dm.z);
+        sprite.scale.set(2, 2.5, 1);
+        sprite.renderOrder = 900;
+        sprite.userData = { defectId: dm.id, isDefectMarker: true };
+
+        group.add(sprite);
+        meshMap.set(dm.id, sprite);
+      }
+    }, [defectMarkers]);
 
     return (
       <div className="relative w-full h-full bg-[#1a1a2e]">

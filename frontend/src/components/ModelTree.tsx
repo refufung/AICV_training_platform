@@ -47,23 +47,34 @@ interface ModelTreeProps {
   elementCount: number;
   onNodeClick?: (node: TreeNode) => void;
   selectedNodeId?: string | null;
+  defectCounts?: Map<number, { count: number; maxSeverity: string }>;
 }
+
+const SEV_BADGE: Record<string, string> = {
+  low: 'bg-green-600/30 text-green-400',
+  medium: 'bg-yellow-600/30 text-yellow-400',
+  high: 'bg-orange-600/30 text-orange-400',
+  critical: 'bg-red-600/30 text-red-400',
+};
 
 function TreeItem({
   node,
   depth,
   onNodeClick,
   selectedNodeId,
+  defectCounts,
 }: {
   node: TreeNode;
   depth: number;
   onNodeClick?: (node: TreeNode) => void;
   selectedNodeId?: string | null;
+  defectCounts?: Map<number, { count: number; maxSeverity: string }>;
 }) {
   const [expanded, setExpanded] = useState(depth < 2);
   const hasChildren = node.children && node.children.length > 0;
   const IconComponent = IFC_ICONS[node.type] || Box;
   const isSelected = selectedNodeId === node.id;
+  const dc = node.componentId && defectCounts ? defectCounts.get(node.componentId) : null;
 
   return (
     <div>
@@ -87,7 +98,12 @@ function TreeItem({
           <span className="w-[14px] shrink-0" />
         )}
         <IconComponent size={14} className="shrink-0 text-gray-400" />
-        <span className="truncate">{node.label}</span>
+        <span className="truncate flex-1">{node.label}</span>
+        {dc && dc.count > 0 && (
+          <span className={`text-[9px] px-1 py-0.5 rounded-full leading-none shrink-0 ${SEV_BADGE[dc.maxSeverity] || SEV_BADGE.low}`}>
+            {dc.count}
+          </span>
+        )}
       </div>
       {expanded && hasChildren && (
         <div>
@@ -98,6 +114,7 @@ function TreeItem({
               depth={depth + 1}
               onNodeClick={onNodeClick}
               selectedNodeId={selectedNodeId}
+              defectCounts={defectCounts}
             />
           ))}
         </div>
@@ -112,6 +129,7 @@ export default function ModelTree({
   elementCount,
   onNodeClick,
   selectedNodeId,
+  defectCounts,
 }: ModelTreeProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [search, setSearch] = useState('');
@@ -186,6 +204,7 @@ export default function ModelTree({
                   depth={0}
                   onNodeClick={onNodeClick}
                   selectedNodeId={selectedNodeId}
+                  defectCounts={defectCounts}
                 />
               ))
             )}

@@ -82,3 +82,64 @@ class DefectStats(BaseModel):
     by_class: dict[str, int]
     by_floor: dict[str, int]
     recent: list[DefectResponse]
+
+
+# ─── BCF Topics ───────────────────────────────────────────────────────────────────
+class BcfCommentResponse(BaseModel):
+    id: int
+    guid: str
+    text: str
+    author: str | None = None
+    created_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class BcfTopicCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=255)
+    description: str | None = None
+    topic_type: str = "issue"
+    priority: str = "normal"
+    status: str = "open"
+    assigned_to: str | None = None
+    due_date: datetime | None = None
+    viewpoint: str | None = None
+    ifc_guids: str | None = None
+    defect_id: int | None = None
+
+
+class BcfTopicResponse(BaseModel):
+    id: int
+    guid: str
+    title: str
+    description: str | None = None
+    topic_type: str
+    priority: str
+    status: str
+    assigned_to: str | None = None
+    due_date: datetime | None = None
+    viewpoint: str | None = None
+    ifc_guids: str | None = None
+    defect_id: int | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    comments: list[BcfCommentResponse] = []
+
+    model_config = {"from_attributes": True}
+
+
+class BcfTopicUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    topic_type: str | None = None
+    priority: str | None = None
+    status: str | None = None
+    assigned_to: str | None = None
+    due_date: datetime | None = None
+    viewpoint: str | None = None
+    ifc_guids: str | None = None
+
+
+class BcfCommentCreate(BaseModel):
+    text: str = Field(..., min_length=1)
+    author: str | None = None

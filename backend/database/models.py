@@ -139,6 +139,62 @@ class Notification(Base):
 
     user = relationship("User")
 
+class BcfTopicTypeEnum(str, enum.Enum):
+    issue = "issue"
+    request = "request"
+    comment = "comment"
+    solution = "solution"
+
+
+class BcfTopicStatusEnum(str, enum.Enum):
+    open = "open"
+    in_progress = "in_progress"
+    closed = "closed"
+    resolved = "resolved"
+
+
+class BcfPriorityEnum(str, enum.Enum):
+    low = "low"
+    normal = "normal"
+    high = "high"
+    critical = "critical"
+
+
+class BcfTopic(Base):
+    __tablename__ = "bcf_topics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    guid = Column(String(64), unique=True, nullable=False, index=True)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    topic_type = Column(Enum(BcfTopicTypeEnum), default=BcfTopicTypeEnum.issue)
+    priority = Column(Enum(BcfPriorityEnum), default=BcfPriorityEnum.normal)
+    status = Column(Enum(BcfTopicStatusEnum), default=BcfTopicStatusEnum.open)
+    assigned_to = Column(String(100), nullable=True)
+    due_date = Column(DateTime, nullable=True)
+    viewpoint = Column(Text, nullable=True)
+    ifc_guids = Column(Text, nullable=True)
+    defect_id = Column(Integer, ForeignKey("defects.id"), nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    defect = relationship("Defect")
+    creator = relationship("User")
+    comments = relationship("BcfComment", back_populates="topic", cascade="all, delete-orphan")
+
+
+class BcfComment(Base):
+    __tablename__ = "bcf_comments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    guid = Column(String(64), unique=True, nullable=False)
+    topic_id = Column(Integer, ForeignKey("bcf_topics.id", ondelete="CASCADE"), nullable=False)
+    text = Column(Text, nullable=False)
+    author = Column(String(100), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+    topic = relationship("BcfTopic", back_populates="comments")
 
 # ─── Database helpers ──────────────────────────────────────────────────────
 def get_db():

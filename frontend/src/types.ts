@@ -91,3 +91,39 @@ export interface LocateResult {
     distance: number;
   } | null;
 }
+
+export interface BcfComment {
+  id: number;
+  guid: string;
+  text: string;
+  author: string | null;
+  created_at: string | null;
+}
+
+export interface BcfTopic {
+  id: number;
+  guid: string;
+  title: string;
+  description: string | null;
+  topic_type: string;
+  priority: string;
+  status: string;
+  assigned_to: string | null;
+  due_date: string | null;
+  viewpoint: string | null;
+  ifc_guids: string | null;
+  defect_id: number | null;
+  created_at: string;
+  updated_at: string;
+  comments: BcfComment[];
+}
+
+export interface BcfTopicCreate {
+  title: string;
+  description?: string;
+  topic_type?: string;
+  priority?: string;
+  viewpoint?: string;
+  ifc_guids?: string;
+  defect_id?: number;
+}
